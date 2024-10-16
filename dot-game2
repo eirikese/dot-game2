@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Orientation Game with Chromecast</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Include the Google Cast SDK -->
+    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #222;
+            color: #fff;
+        }
+        #container {
+            width: 100%;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        #menu {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #menu label {
+            margin: 10px 0 5px;
+        }
+        #menu input {
+            padding: 5px;
+            font-size: 1em;
+        }
+        #gameArea {
+            position: relative;
+            display: none;
+        }
+        #score, #timer {
+            font-size: 1.5em;
+            margin-top: 10px;
+        }
+        #button {
+            padding: 15px 30px; 
+            font-size: 1em;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        canvas {
+            background-color: #fff;
+            border: 2px solid #000;
+            border-radius: 50%;
+        }
+        #gameOver {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(34, 34, 34, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            z-index: 1000;
+        }
+        #gameOver h2 {
+            margin-bottom: 20px;
+        }
+        /* Styling for the cast button */
+        #castButton {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+        #castButton button {
+            background-color: #fff;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Orientation Game</h1>
+        <!-- Cast Button -->
+        <div id="castButton">
+            <button id="cast-button">Cast</button>
+        </div>
+        <div id="menu">
+            <label for="targetSize">Target Size (10 - 50):</label>
+            <input type="number" id="targetSize" value="15" min="10" max="50">
+            <label for="imuSensitivity">IMU Sensitivity (5° - 45°):</label>
+            <input type="number" id="imuSensitivity" value="30" min="5" max="45">
+            <label for="hoverTime">Hover Time (0 - 5 s):</label>
+            <input type="number" id="hoverTime" value="0" min="0" max="5" step="0.1">
+            <label for="gameTime">Game Time (seconds):</label>
+            <input type="number" id="gameTime" value="30" min="10" max="120">
+            <button id="button">Start Game</button>
+        </div>
+        <div id="gameArea">
+            <canvas id="gameCanvas" width="300" height="300"></canvas>
+            <div id="score">Score: <span id="scoreValue">0</span></div>
+            <div id="timer">Time Left: <span id="timeLeft">0</span>s</div>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const button = document.getElementById("button");
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("scoreValue");
+        const timerElement = document.getElementById("timeLeft");
+        let score = 0;
+        let gameTime = 30;
+        let timeLeft = 0;
+        let gameInterval;
+        let gameRunning = false;
+
+        const circleRadius = canvas.width / 2 - 10;
+        const redDotRadius = 15;
+        let blueDotRadius = 15;
+        let blueDotPosition = { x: 0, y: 0 };
+        let redDotTrace = [];
+        let blueDotsPositions = [];
+        let imuSensitivity = 30; // Degrees to reach the edge of the circle
+        let hoverTimeRequired = 0; // Seconds required to hover over the blue dot
+        let hoverStartTime = null;
+        let hovering = false;
+
+        // Chromecast variables
+        let castContext;
+        let castSession;
+        // Replace with your own application ID if you have registered one
+        let castApplicationID = 'CC1AD845'; // Default media receiver ID (for testing)
+
+        window['__onGCastApiAvailable'] = function(isAvailable) {
+            if (isAvailable) {
+                initializeCastApi();
+            }
+        };
+
+        function initializeCastApi() {
+            cast.framework.CastContext.getInstance().setOptions({
+                receiverApplicationId: castApplicationID,
+                autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+            });
+            castContext = cast.framework.CastContext.getInstance();
+        }
+
+        // Cast Button Event Listener
+        document.getElementById('cast-button').addEventListener('click', () => {
+            castContext.requestSession().then(function() {
+                console.log('Cast session started');
+                castSession = castContext.getCurrentSession();
+            }).catch(function(error) {
+                console.error('Error starting cast session:', error);
+            });
+        });
+
+        // Function to send the canvas image to the Chromecast
+        function sendCanvasToCast() {
+            if (castSession) {
+                let message = {
+                    type: 'canvas',
+                    data: canvas.toDataURL('image/png')
+                };
+                castSession.sendMessage('urn:x-cast:com.example.cast', message).then(() => {
+                    // Success
+                }).catch((error) => {
+                    console.error('Error sending message:', error);
+                });
+            }
+        }
+
+        button.addEventListener("click", () => {
+            const targetSizeInput = document.getElementById("targetSize");
+            const imuSensitivityInput = document.getElementById("imuSensitivity");
+            const hoverTimeInput = document.getElementById("hoverTime");
+            const gameTimeInput = document.getElementById("gameTime");
+
+            blueDotRadius = parseInt(targetSizeInput.value) || 15;
+            imuSensitivity = parseFloat(imuSensitivityInput.value) || 30;
+            hoverTimeRequired = parseFloat(hoverTimeInput.value) || 0;
+            gameTime = parseInt(gameTimeInput.value) || 30;
+            timeLeft = gameTime;
+            timerElement.textContent = timeLeft;
+            score = 0;
+            scoreElement.textContent = score;
+            redDotTrace = [];
+            blueDotsPositions = [];
+            hoverStartTime = null;
+            hovering = false;
+
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                // iOS 13+ requires permission
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            startGame();
+                            document.getElementById("menu").style.display = 'none';
+                            document.getElementById("gameArea").style.display = 'block';
+                        } else {
+                            alert("Permission denied. Please allow access to motion sensors.");
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Non-iOS devices
+                startGame();
+                document.getElementById("menu").style.display = 'none';
+                document.getElementById("gameArea").style.display = 'block';
+            }
+        });
+
+        function startGame() {
+            gameRunning = true;
+            window.addEventListener('deviceorientation', handleOrientation);
+            placeBlueDot();
+            drawGame(0, 0);
+            gameInterval = setInterval(() => {
+                timeLeft--;
+                timerElement.textContent = timeLeft;
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            gameRunning = false;
+            clearInterval(gameInterval);
+            window.removeEventListener('deviceorientation', handleOrientation);
+            displayGameOver();
+        }
+
+        function handleOrientation(event) {
+            if (!gameRunning) return;
+
+            const beta = event.beta || 0;   // X-axis rotation
+            const gamma = event.gamma || 0; // Y-axis rotation
+
+            // Map beta and gamma to x and y coordinates based on IMU sensitivity
+            const maxAngle = imuSensitivity; // Maximum angle to map
+            const x = (gamma / maxAngle) * circleRadius;
+            const y = (beta / maxAngle) * circleRadius;
+
+            // Limit x and y to circle boundaries
+            const distanceFromCenter = Math.sqrt(x * x + y * y);
+            let mappedX = x;
+            let mappedY = y;
+            if (distanceFromCenter > circleRadius) {
+                const scalingFactor = circleRadius / distanceFromCenter;
+                mappedX *= scalingFactor;
+                mappedY *= scalingFactor;
+            }
+
+            // Record red dot position
+            redDotTrace.push({ x: mappedX, y: mappedY });
+
+            drawGame(mappedX, mappedY);
+            checkCollision(mappedX, mappedY);
+
+            // Send orientation data to Chromecast (Alternative approach)
+            sendOrientationToCast(beta, gamma);
+
+            // Or send canvas image to Chromecast
+            sendCanvasToCast();
+        }
+
+        function sendOrientationToCast(beta, gamma) {
+            if (castSession) {
+                let message = {
+                    type: 'orientation',
+                    beta: beta,
+                    gamma: gamma,
+                    imuSensitivity: imuSensitivity
+                };
+                castSession.sendMessage('urn:x-cast:com.example.cast', message).then(() => {
+                    // Success
+                }).catch((error) => {
+                    console.error('Error sending message:', error);
+                });
+            }
+        }
+
+        function placeBlueDot() {
+            // Generate random position within the circle
+            let angle = Math.random() * 2 * Math.PI;
+            let radius = Math.random() * (circleRadius - blueDotRadius);
+
+            blueDotPosition.x = radius * Math.cos(angle);
+            blueDotPosition.y = radius * Math.sin(angle);
+
+            // Record blue dot position
+            blueDotsPositions.push({ x: blueDotPosition.x, y: blueDotPosition.y });
+        }
+
+        function drawGame(redX, redY) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw main circle
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, circleRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw blue dot
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2 + blueDotPosition.x, canvas.height / 2 + blueDotPosition.y, blueDotRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = '#0000FF';
+            ctx.fill();
+
+            // Draw red dot (controlled by phone orientation)
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2 + redX, canvas.height / 2 + redY, redDotRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = '#FF0000';
+            ctx.fill();
+        }
+
+        function checkCollision(redX, redY) {
+            const dx = redX - blueDotPosition.x;
+            const dy = redY - blueDotPosition.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Check if the red dot overlaps the blue dot by at least 50%
+            const overlapCondition = distance < redDotRadius + blueDotRadius - Math.min(redDotRadius, blueDotRadius) / 2;
+
+            if (overlapCondition) {
+                if (!hovering) {
+                    hovering = true;
+                    hoverStartTime = performance.now();
+                } else {
+                    const hoverDuration = (performance.now() - hoverStartTime) / 1000; // Convert to seconds
+                    if (hoverDuration >= hoverTimeRequired) {
+                        score++;
+                        scoreElement.textContent = score;
+                        placeBlueDot();
+                        hovering = false;
+                        hoverStartTime = null;
+                    }
+                }
+            } else {
+                hovering = false;
+                hoverStartTime = null;
+            }
+        }
+
+        function displayGameOver() {
+            // Display score and trace
+            const gameOverDiv = document.createElement('div');
+            gameOverDiv.id = 'gameOver';
+
+            const scoreHeading = document.createElement('h2');
+            scoreHeading.textContent = `Game Over! Your Score: ${score}`;
+            gameOverDiv.appendChild(scoreHeading);
+
+            const replayButton = document.createElement('button');
+            replayButton.textContent = 'Play Again';
+            replayButton.addEventListener('click', () => {
+                gameOverDiv.remove();
+                document.getElementById("menu").style.display = 'flex';
+                document.getElementById("gameArea").style.display = 'none';
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+            gameOverDiv.appendChild(replayButton);
+
+            // Draw the trace and blue dots
+            drawTrace();
+
+            document.getElementById('gameArea').appendChild(gameOverDiv);
+
+            // Optionally, end the cast session
+            if (castSession) {
+                castSession.endSession(true);
+            }
+        }
+
+        function drawTrace() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw main circle
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, circleRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw all blue dots
+            for (let pos of blueDotsPositions) {
+                ctx.beginPath();
+                ctx.arc(canvas.width / 2 + pos.x, canvas.height / 2 + pos.y, blueDotRadius, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(0, 0, 255, 0.5)';
+                ctx.fill();
+            }
+
+            // Draw red dot trace
+            if (redDotTrace.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(canvas.width / 2 + redDotTrace[0].x, canvas.height / 2 + redDotTrace[0].y);
+                for (let i = 1; i < redDotTrace.length; i++) {
+                    ctx.lineTo(canvas.width / 2 + redDotTrace[i].x, canvas.height / 2 + redDotTrace[i].y);
+                }
+                ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+    </script>
+</body>
+</html>
