@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chromecast Receiver</title>
+    <script type="text/javascript" src="//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+</head>
+<body>
+    <script type="text/javascript">
+        const context = cast.framework.CastReceiverContext.getInstance();
+        const options = new cast.framework.CastReceiverOptions();
+        options.customNamespaces = {
+            'urn:x-cast:com.example.cast': cast.framework.system.MessageType.JSON
+        };
+        context.start(options);
+
+        let canvas, ctx;
+        window.onload = function() {
+            canvas = document.createElement('canvas');
+            canvas.width = 1280;
+            canvas.height = 720;
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            document.body.appendChild(canvas);
+            ctx = canvas.getContext('2d');
+        };
+
+        context.addCustomMessageListener('urn:x-cast:com.example.cast', function(event) {
+            const message = event.data;
+            if (message.type === 'canvas') {
+                const img = new Image();
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                };
+                img.src = message.data;
+            } else if (message.type === 'orientation') {
+                // Optional: Implement game logic on receiver
+                // For better performance, you can implement the game rendering here
+            }
+        });
+    </script>
+</body>
+</html>
