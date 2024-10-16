@@ -143,7 +143,7 @@
         let castContext;
         let castSession;
         // Replace with your own application ID if you have registered one
-        let castApplicationID = '001C414D'; // Default media receiver ID (for testing)
+        let castApplicationID = 'CC1AD845'; // Default media receiver ID (for testing)
 
         window['__onGCastApiAvailable'] = function(isAvailable) {
             if (isAvailable) {
@@ -272,27 +272,8 @@
             drawGame(mappedX, mappedY);
             checkCollision(mappedX, mappedY);
 
-            // Send orientation data to Chromecast (Alternative approach)
-            sendOrientationToCast(beta, gamma);
-
-            // Or send canvas image to Chromecast
+            // Send canvas image to Chromecast
             sendCanvasToCast();
-        }
-
-        function sendOrientationToCast(beta, gamma) {
-            if (castSession) {
-                let message = {
-                    type: 'orientation',
-                    beta: beta,
-                    gamma: gamma,
-                    imuSensitivity: imuSensitivity
-                };
-                castSession.sendMessage('urn:x-cast:com.example.cast', message).then(() => {
-                    // Success
-                }).catch((error) => {
-                    console.error('Error sending message:', error);
-                });
-            }
         }
 
         function placeBlueDot() {
