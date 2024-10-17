@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Orientation Game with Chromecast</title>
+    <title>Orientation Game v1.0</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <!-- Include the Google Cast SDK -->
-    <script type="text/javascript" src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
     <style>
         body {
             font-family: Arial, sans-serif; 
@@ -29,26 +27,29 @@
             display: flex;
             flex-direction: column;
             align-items: center;
+            font-size: 2em; /* Double text size */
         }
         #menu label {
-            margin: 10px 0 5px;
+            margin: 20px 0 10px; /* Adjusted for larger text */
         }
-        #menu input {
-            padding: 5px;
+        #menu input, #menu select {
+            padding: 10px;
             font-size: 1em;
         }
         #gameArea {
             position: relative;
-            display: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
         #score, #timer {
-            font-size: 1.5em;
-            margin-top: 10px;
+            font-size: 3em; /* Double text size */
+            margin-top: 20px;
         }
         #button {
-            padding: 15px 30px; 
+            padding: 20px 40px; 
             font-size: 1em;
-            margin-top: 20px;
+            margin-top: 40px;
             cursor: pointer;
         }
         canvas {
@@ -57,59 +58,46 @@
             border-radius: 50%;
         }
         #gameOver {
-            position: absolute;
-            top: 0;
-            left: 0;
+            position: relative;
             width: 100%;
-            height: 100%;
             background-color: rgba(34, 34, 34, 0.9);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             color: #fff;
-            z-index: 1000;
+            margin-top: 20px;
+            padding: 20px;
+            font-size: 2em; /* Double text size */
         }
         #gameOver h2 {
             margin-bottom: 20px;
         }
-        /* Styling for the cast button */
-        #castButton {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-        }
-        #castButton button {
-            background-color: #fff;
-            border: none;
-            padding: 10px;
-            border-radius: 5px;
+        #gameOver button {
+            padding: 20px 40px;
             font-size: 1em;
             cursor: pointer;
         }
-        /* Styling for the version number */
+        /* Added CSS for version number */
         #version {
             position: absolute;
             bottom: 10px;
             right: 10px;
+            font-size: 1.5em; /* Adjust size as needed */
             color: #fff;
-            font-size: 0.8em;
-            opacity: 0.7;
-            z-index: 1000;
+            opacity: 0.5; /* Slightly transparent */
         }
     </style>
 </head>
 <body>
     <div id="container">
-        <h1>Orientation Game</h1>
-        <!-- Cast Button -->
-        <div id="castButton">
-            <button id="cast-button">Cast</button>
-        </div>
-        <!-- Version Number -->
-        <div id="version">v1.0</div>
+        <h1 style="font-size: 4em;">Orientation Game</h1>
         <div id="menu">
+            <label for="mode">Game Mode:</label>
+            <select id="mode">
+                <option value="random">Random Dots</option>
+                <option value="predefined">Predefined Dots</option>
+            </select>
             <label for="targetSize">Target Size (10 - 50):</label>
             <input type="number" id="targetSize" value="15" min="10" max="50">
             <label for="imuSensitivity">IMU Sensitivity (5° - 45°):</label>
@@ -120,15 +108,16 @@
             <input type="number" id="gameTime" value="30" min="10" max="120">
             <button id="button">Start Game</button>
         </div>
-        <div id="gameArea">
+        <div id="gameArea" style="display:none;">
             <canvas id="gameCanvas" width="300" height="300"></canvas>
             <div id="score">Score: <span id="scoreValue">0</span></div>
             <div id="timer">Time Left: <span id="timeLeft">0</span>s</div>
         </div>
+        <!-- Added version number element -->
+        <div id="version">v1.0</div>
     </div>
 
     <script>
-        // Game variables
         const button = document.getElementById("button");
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
@@ -140,6 +129,7 @@
         let gameInterval;
         let gameRunning = false;
 
+        // Game variables
         const circleRadius = canvas.width / 2 - 10;
         const redDotRadius = 15;
         let blueDotRadius = 15;
@@ -150,58 +140,19 @@
         let hoverTimeRequired = 0; // Seconds required to hover over the blue dot
         let hoverStartTime = null;
         let hovering = false;
-
-        // Chromecast variables
-        let castContext;
-        let castSession;
-        // Replace with your own application ID if you have registered one
-        let castApplicationID = 'CC1AD845'; // Default media receiver ID (for testing)
-
-        window['__onGCastApiAvailable'] = function(isAvailable) {
-            if (isAvailable) {
-                initializeCastApi();
-            }
-        };
-
-        function initializeCastApi() {
-            cast.framework.CastContext.getInstance().setOptions({
-                receiverApplicationId: castApplicationID,
-                autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
-            });
-            castContext = cast.framework.CastContext.getInstance();
-        }
-
-        // Cast Button Event Listener
-        document.getElementById('cast-button').addEventListener('click', () => {
-            castContext.requestSession().then(function() {
-                console.log('Cast session started');
-                castSession = castContext.getCurrentSession();
-            }).catch(function(error) {
-                console.error('Error starting cast session:', error);
-            });
-        });
-
-        // Function to send the canvas image to the Chromecast
-        function sendCanvasToCast() {
-            if (castSession) {
-                let message = {
-                    type: 'canvas',
-                    data: canvas.toDataURL('image/png')
-                };
-                castSession.sendMessage('urn:x-cast:com.example.cast', message).then(() => {
-                    // Success
-                }).catch((error) => {
-                    console.error('Error sending message:', error);
-                });
-            }
-        }
+        let gameMode = "random"; // "random" or "predefined"
+        let predefinedDots = [];
+        let currentDotIndex = -1;
+        let startTime, endTime;
 
         button.addEventListener("click", () => {
+            const modeSelect = document.getElementById("mode");
             const targetSizeInput = document.getElementById("targetSize");
             const imuSensitivityInput = document.getElementById("imuSensitivity");
             const hoverTimeInput = document.getElementById("hoverTime");
             const gameTimeInput = document.getElementById("gameTime");
 
+            gameMode = modeSelect.value;
             blueDotRadius = parseInt(targetSizeInput.value) || 15;
             imuSensitivity = parseFloat(imuSensitivityInput.value) || 30;
             hoverTimeRequired = parseFloat(hoverTimeInput.value) || 0;
@@ -214,6 +165,7 @@
             blueDotsPositions = [];
             hoverStartTime = null;
             hovering = false;
+            currentDotIndex = -1;
 
             if (typeof DeviceMotionEvent.requestPermission === 'function') {
                 // iOS 13+ requires permission
@@ -222,7 +174,7 @@
                         if (permissionState === 'granted') {
                             startGame();
                             document.getElementById("menu").style.display = 'none';
-                            document.getElementById("gameArea").style.display = 'block';
+                            document.getElementById("gameArea").style.display = 'flex';
                         } else {
                             alert("Permission denied. Please allow access to motion sensors.");
                         }
@@ -232,28 +184,44 @@
                 // Non-iOS devices
                 startGame();
                 document.getElementById("menu").style.display = 'none';
-                document.getElementById("gameArea").style.display = 'block';
+                document.getElementById("gameArea").style.display = 'flex';
             }
         });
 
         function startGame() {
             gameRunning = true;
             window.addEventListener('deviceorientation', handleOrientation);
-            placeBlueDot();
+
+            if (gameMode === "predefined") {
+                // Initialize predefined dots
+                initializePredefinedDots();
+                startTime = performance.now();
+                placeNextPredefinedDot();
+            } else {
+                // Random dots mode
+                placeBlueDot();
+                timeLeft = gameTime;
+                gameInterval = setInterval(() => {
+                    timeLeft--;
+                    timerElement.textContent = timeLeft;
+                    if (timeLeft <= 0) {
+                        endGame();
+                    }
+                }, 1000);
+            }
+
             drawGame(0, 0);
-            gameInterval = setInterval(() => {
-                timeLeft--;
-                timerElement.textContent = timeLeft;
-                if (timeLeft <= 0) {
-                    endGame();
-                }
-            }, 1000);
         }
 
         function endGame() {
             gameRunning = false;
             clearInterval(gameInterval);
             window.removeEventListener('deviceorientation', handleOrientation);
+            if (gameMode === "predefined") {
+                endTime = performance.now();
+                score = ((endTime - startTime) / 1000).toFixed(2); // Total time used in seconds
+                scoreElement.textContent = score;
+            }
             displayGameOver();
         }
 
@@ -270,26 +238,63 @@
 
             // Limit x and y to circle boundaries
             const distanceFromCenter = Math.sqrt(x * x + y * y);
-            let mappedX = x;
-            let mappedY = y;
             if (distanceFromCenter > circleRadius) {
                 const scalingFactor = circleRadius / distanceFromCenter;
-                mappedX *= scalingFactor;
-                mappedY *= scalingFactor;
+                x *= scalingFactor;
+                y *= scalingFactor;
             }
 
             // Record red dot position
-            redDotTrace.push({ x: mappedX, y: mappedY });
+            redDotTrace.push({ x: x, y: y });
 
-            drawGame(mappedX, mappedY);
-            checkCollision(mappedX, mappedY);
+            drawGame(x, y);
+            checkCollision(x, y);
+        }
 
-            // Send canvas image to Chromecast
-            sendCanvasToCast();
+        function initializePredefinedDots() {
+            predefinedDots = [];
+
+            // Center dot
+            predefinedDots.push({ x: 0, y: 0, visited: false });
+
+            // Edge dots (8 evenly spaced)
+            for (let i = 0; i < 8; i++) {
+                const angle = (i * Math.PI) / 4; // 0 to 2π in steps of π/4
+                const radius = circleRadius - blueDotRadius - 5; // Slightly inside the circle
+                const x = radius * Math.cos(angle);
+                const y = radius * Math.sin(angle);
+                predefinedDots.push({ x: x, y: y, visited: false });
+            }
+        }
+
+        function placeNextPredefinedDot() {
+            if (currentDotIndex >= predefinedDots.length - 1) {
+                // All dots visited
+                endGame();
+                return;
+            }
+
+            if (currentDotIndex === -1 || currentDotIndex % 2 === 1) {
+                // After an edge dot, go to center dot
+                currentDotIndex = 0; // Center dot index
+            } else {
+                // After center dot, pick a random unvisited edge dot
+                const unvisitedEdgeDots = predefinedDots.slice(1).filter(dot => !dot.visited);
+                if (unvisitedEdgeDots.length === 0) {
+                    // All edge dots visited
+                    endGame();
+                    return;
+                }
+                const randomDot = unvisitedEdgeDots[Math.floor(Math.random() * unvisitedEdgeDots.length)];
+                currentDotIndex = predefinedDots.indexOf(randomDot);
+            }
+
+            blueDotPosition = { x: predefinedDots[currentDotIndex].x, y: predefinedDots[currentDotIndex].y };
+            predefinedDots[currentDotIndex].visited = false; // Reset visited status for the next target
         }
 
         function placeBlueDot() {
-            // Generate random position within the circle
+            // Random position within the circle
             let angle = Math.random() * 2 * Math.PI;
             let radius = Math.random() * (circleRadius - blueDotRadius);
 
@@ -338,9 +343,14 @@
                 } else {
                     const hoverDuration = (performance.now() - hoverStartTime) / 1000; // Convert to seconds
                     if (hoverDuration >= hoverTimeRequired) {
-                        score++;
-                        scoreElement.textContent = score;
-                        placeBlueDot();
+                        if (gameMode === "predefined") {
+                            predefinedDots[currentDotIndex].visited = true;
+                            placeNextPredefinedDot();
+                        } else {
+                            score++;
+                            scoreElement.textContent = score;
+                            placeBlueDot();
+                        }
                         hovering = false;
                         hoverStartTime = null;
                     }
@@ -357,7 +367,11 @@
             gameOverDiv.id = 'gameOver';
 
             const scoreHeading = document.createElement('h2');
-            scoreHeading.textContent = `Game Over! Your Score: ${score}`;
+            if (gameMode === "predefined") {
+                scoreHeading.textContent = `Well done! Total Time: ${score} seconds`;
+            } else {
+                scoreHeading.textContent = `Game Over! Your Score: ${score}`;
+            }
             gameOverDiv.appendChild(scoreHeading);
 
             const replayButton = document.createElement('button');
@@ -373,7 +387,7 @@
             // Draw the trace and blue dots
             drawTrace();
 
-            document.getElementById('gameArea').appendChild(gameOverDiv);
+            document.getElementById('container').appendChild(gameOverDiv);
         }
 
         function drawTrace() {
@@ -387,11 +401,20 @@
             ctx.stroke();
 
             // Draw all blue dots
-            for (let pos of blueDotsPositions) {
-                ctx.beginPath();
-                ctx.arc(canvas.width / 2 + pos.x, canvas.height / 2 + pos.y, blueDotRadius, 0, 2 * Math.PI);
-                ctx.fillStyle = 'rgba(0, 0, 255, 0.5)';
-                ctx.fill();
+            if (gameMode === "predefined") {
+                for (let dot of predefinedDots) {
+                    ctx.beginPath();
+                    ctx.arc(canvas.width / 2 + dot.x, canvas.height / 2 + dot.y, blueDotRadius, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'rgba(0, 0, 255, 0.5)';
+                    ctx.fill();
+                }
+            } else {
+                for (let pos of blueDotsPositions) {
+                    ctx.beginPath();
+                    ctx.arc(canvas.width / 2 + pos.x, canvas.height / 2 + pos.y, blueDotRadius, 0, 2 * Math.PI);
+                    ctx.fillStyle = 'rgba(0, 0, 255, 0.5)';
+                    ctx.fill();
+                }
             }
 
             // Draw red dot trace
