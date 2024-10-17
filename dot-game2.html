@@ -139,9 +139,6 @@
     </div>
 
     <script>
-        // JavaScript code remains largely the same
-        // Ensure that the game starts at the center dot for predefined dots
-
         const button = document.getElementById("button");
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
@@ -217,7 +214,8 @@
             if (gameMode === "predefined") {
                 // Initialize predefined dots
                 initializePredefinedDots();
-                // Do not start the timer yet
+                // Set returningToCenter to true to start with the center dot
+                returningToCenter = true; // Updated line
                 placeNextPredefinedDot();
             } else {
                 // Random dots mode
