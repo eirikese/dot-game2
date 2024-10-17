@@ -4,6 +4,7 @@
     <title>Orientation Game v1.0</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <style>
+        /* Responsive font sizes increased by 20% */
         body {
             font-family: Arial, sans-serif; 
             text-align: center; 
@@ -19,7 +20,6 @@
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
-            justify-content: center;
             align-items: center;
             position: relative;
         }
@@ -27,14 +27,15 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            font-size: 2em; /* Double text size */
+            font-size: 4.8vw; /* Increased by 20% */
         }
         #menu label {
-            margin: 20px 0 10px; /* Adjusted for larger text */
+            margin: 2vh 0 1vh; /* Responsive margins */
         }
         #menu input, #menu select {
-            padding: 10px;
-            font-size: 1em;
+            padding: 1vh;
+            font-size: 2.4vw; /* Increased by 20% */
+            max-width: 80%;
         }
         #gameArea {
             position: relative;
@@ -43,19 +44,22 @@
             align-items: center;
         }
         #score {
-            font-size: 3em; /* Double text size */
-            margin-top: 20px;
+            font-size: 6vw; /* Increased by 20% */
+            margin-top: 2vh;
         }
         #button {
-            padding: 20px 40px; 
-            font-size: 1em;
-            margin-top: 40px;
+            padding: 2vh 4vw; 
+            font-size: 2.4vw; /* Increased by 20% */
+            margin-top: 4vh;
             cursor: pointer;
+            max-width: 80%;
         }
         canvas {
             background-color: #fff;
             border: 2px solid #000;
             border-radius: 50%;
+            max-width: 90vw;
+            max-height: 50vh;
         }
         #gameOver {
             position: relative;
@@ -66,32 +70,50 @@
             justify-content: center;
             align-items: center;
             color: #fff;
-            margin-top: 20px;
-            padding: 20px;
-            font-size: 2em; /* Double text size */
+            margin-top: 2vh;
+            padding: 2vh;
+            font-size: 4.8vw; /* Increased by 20% */
         }
         #gameOver h2 {
-            margin-bottom: 20px;
+            margin-bottom: 2vh;
         }
         #gameOver button {
-            padding: 20px 40px;
-            font-size: 1em;
+            padding: 2vh 4vw;
+            font-size: 2.4vw; /* Increased by 20% */
             cursor: pointer;
+            max-width: 80%;
         }
         /* Added CSS for version number */
         #version {
             position: absolute;
-            bottom: 10px;
-            right: 10px;
-            font-size: 1.5em; /* Adjust size as needed */
+            bottom: 1vh;
+            right: 1vw;
+            font-size: 2.4vw; /* Increased by 20% */
             color: #fff;
             opacity: 0.5; /* Slightly transparent */
+        }
+        /* Responsive title */
+        h1 {
+            font-size: 7.2vw; /* Increased by 20% */
+            margin-top: 2vh;
+        }
+        /* Ensure elements don't overflow */
+        @media (max-height: 500px) {
+            #menu, #gameOver, #score {
+                font-size: 3.6vw; /* Increased by 20% */
+            }
+            h1 {
+                font-size: 6vw; /* Increased by 20% */
+            }
+            #button, #gameOver button {
+                font-size: 1.8vw; /* Increased by 20% */
+            }
         }
     </style>
 </head>
 <body>
     <div id="container">
-        <h1 style="font-size: 4em;">Orientation Game</h1>
+        <h1>Orientation Game</h1>
         <div id="menu">
             <label for="mode">Game Mode:</label>
             <select id="mode">
@@ -110,13 +132,16 @@
         </div>
         <div id="gameArea" style="display:none;">
             <canvas id="gameCanvas" width="300" height="300"></canvas>
-            <div id="score">Total Time: <span id="scoreValue">0</span>s</div>
+            <div id="score">Total Time: <span id="scoreValue">0.00</span>s</div>
         </div>
         <!-- Added version number element -->
         <div id="version">v1.0</div>
     </div>
 
     <script>
+        // JavaScript code remains largely the same
+        // Ensure that the game starts at the center dot for predefined dots
+
         const button = document.getElementById("button");
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
@@ -141,6 +166,7 @@
         let startTime, endTime;
         let gameStarted = false; // To track if the game has officially started
         let returningToCenter = false;
+        let timeInterval;
 
         button.addEventListener("click", () => {
             const modeSelect = document.getElementById("mode");
@@ -155,7 +181,7 @@
             hoverTimeRequired = parseFloat(hoverTimeInput.value) || 0;
             gameTime = parseInt(gameTimeInput.value) || 30;
             score = 0;
-            scoreElement.textContent = score;
+            scoreElement.textContent = "0.00";
             redDotTrace = [];
             hoverStartTime = null;
             hovering = false;
@@ -205,6 +231,7 @@
             gameRunning = false;
             window.removeEventListener('deviceorientation', handleOrientation);
             if (gameMode === "predefined") {
+                clearInterval(timeInterval);
                 endTime = performance.now();
                 if (gameStarted) {
                     score = ((endTime - startTime) / 1000).toFixed(2); // Total time used in seconds
@@ -352,6 +379,8 @@
                                 // The first center dot has been completed
                                 startTime = performance.now();
                                 gameStarted = true;
+                                // Start the continuous time update
+                                timeInterval = setInterval(updateTime, 100); // Update every 100ms
                             }
                             placeNextPredefinedDot();
                         } else {
@@ -366,6 +395,14 @@
             } else {
                 hovering = false;
                 hoverStartTime = null;
+            }
+        }
+
+        function updateTime() {
+            if (gameStarted) {
+                const currentTime = performance.now();
+                score = ((currentTime - startTime) / 1000).toFixed(2);
+                scoreElement.textContent = score;
             }
         }
 
