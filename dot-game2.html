@@ -42,7 +42,7 @@
             flex-direction: column;
             align-items: center;
         }
-        #score, #timer {
+        #score {
             font-size: 3em; /* Double text size */
             margin-top: 20px;
         }
@@ -139,6 +139,7 @@
         let predefinedDots = [];
         let currentDotIndex = -1;
         let startTime, endTime;
+        let gameStarted = false; // To track if the game has officially started
         let returningToCenter = false;
 
         button.addEventListener("click", () => {
@@ -160,6 +161,7 @@
             hovering = false;
             currentDotIndex = -1;
             returningToCenter = false;
+            gameStarted = false;
 
             if (typeof DeviceMotionEvent.requestPermission === 'function') {
                 // iOS 13+ requires permission
@@ -189,7 +191,7 @@
             if (gameMode === "predefined") {
                 // Initialize predefined dots
                 initializePredefinedDots();
-                startTime = performance.now();
+                // Do not start the timer yet
                 placeNextPredefinedDot();
             } else {
                 // Random dots mode
@@ -204,7 +206,11 @@
             window.removeEventListener('deviceorientation', handleOrientation);
             if (gameMode === "predefined") {
                 endTime = performance.now();
-                score = ((endTime - startTime) / 1000).toFixed(2); // Total time used in seconds
+                if (gameStarted) {
+                    score = ((endTime - startTime) / 1000).toFixed(2); // Total time used in seconds
+                } else {
+                    score = "0.00";
+                }
                 scoreElement.textContent = score;
             }
             displayGameOver();
@@ -342,6 +348,11 @@
                     const hoverDuration = (performance.now() - hoverStartTime) / 1000; // Convert to seconds
                     if (hoverDuration >= hoverTimeRequired) {
                         if (gameMode === "predefined") {
+                            if (!gameStarted && currentDotIndex === 0) {
+                                // The first center dot has been completed
+                                startTime = performance.now();
+                                gameStarted = true;
+                            }
                             placeNextPredefinedDot();
                         } else {
                             score++;
